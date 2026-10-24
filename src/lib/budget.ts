@@ -46,7 +46,8 @@ async function load(): Promise<{ ledger: Ledger; etag: string | null }> {
       delete ledger.open[id];
     }
   }
-  return { ledger, etag: r.blob.etag };
+  // 圧縮して返されると弱い ETag（W/"…"）になるので、条件つきの書き込みに使えるよう、同じ値の強い ETag にする
+  return { ledger, etag: r.blob.etag.replace(/^W\//, "") };
 }
 
 /** 記録を読み、変えて、条件つきで書く（ほかの呼び出しが先に書いていたら、読み直してやり直す） */
