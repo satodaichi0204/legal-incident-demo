@@ -25,18 +25,20 @@ type Usage = { model: string; inTok: number; outTok: number; usd: number };
 
 /** 予算を予約して1回呼ぶ。失敗したときも、予約の扱いを必ず確定する */
 async function call<T>(kind: CallLog["kind"], company: string, worst: number, ip: string, run: () => Promise<{ value: T; usage: Usage; result: (v: T) => string }>): Promise<{ value: T; usage: Usage; ms: number } | { error: string }> {
-  const r = await reserve(worst, ip);
+  const r = await reserve(worst, ip).catch((e: Error) => ({ error: e.message }));
   if ("error" in r) return r;
+  // 記録に失敗しても、予約は5分後に「予約の額のまま」費用として確定する（多めに数える）ので、上限は守られる
+  const settleSafe = (log: CallLog | null) => settle(r.id, log).catch((e) => console.error("予算の記録に失敗", e));
   const t0 = Date.now();
   try {
     const { value, usage, result } = await run();
     const ms = Date.now() - t0;
-    await settle(r.id, { at: new Date().toISOString(), kind, company, ...usage, ms, result: result(value) });
+    await settleSafe({ at: new Date().toISOString(), kind, company, ...usage, ms, result: result(value) });
     return { value, usage, ms };
   } catch (e) {
     // 状態コードのある API のエラーは課金されないので 0、通信の途中の失敗は予約の額のまま（多めに数える）
     const billed = !(e instanceof Anthropic.APIError && e.status !== undefined);
-    await settle(r.id, billed ? null : { at: new Date().toISOString(), kind, company, model: "-", inTok: 0, outTok: 0, usd: 0, ms: Date.now() - t0, result: "エラー" });
+    await settleSafe(billed ? null : { at: new Date().toISOString(), kind, company, model: "-", inTok: 0, outTok: 0, usd: 0, ms: Date.now() - t0, result: "エラー" });
     if (e instanceof Anthropic.RateLimitError) return { error: "AI が混み合っています。少し待ってからお試しください。" };
     if (e instanceof Anthropic.APIError) return { error: `AI の呼び出しに失敗しました（${e.status ?? "通信"}）。` };
     throw e;

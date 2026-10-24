@@ -51,7 +51,7 @@ async function load(): Promise<{ ledger: Ledger; etag: string | null }> {
 
 /** 記録を読み、変えて、条件つきで書く（ほかの呼び出しが先に書いていたら、読み直してやり直す） */
 async function update<T>(fn: (l: Ledger) => T): Promise<T> {
-  for (let i = 0; i < 8; i++) {
+  for (let i = 0; i < 12; i++) {
     const { ledger, etag } = await load();
     const out = fn(ledger);
     try {
@@ -64,7 +64,7 @@ async function update<T>(fn: (l: Ledger) => T): Promise<T> {
       return out;
     } catch (e) {
       if (e instanceof BlobPreconditionFailedError || (e instanceof Error && /already exists|precondition/i.test(e.message))) {
-        await new Promise((r) => setTimeout(r, 80 + Math.random() * 200));
+        await new Promise((r) => setTimeout(r, Math.min(2000, 150 * 2 ** i) + Math.random() * 200));
         continue;
       }
       throw e;

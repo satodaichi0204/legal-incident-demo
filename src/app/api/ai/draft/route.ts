@@ -2,6 +2,8 @@ import { InputError, clientIp, liveDraft, parseInput, sameOrigin } from "@/lib/a
 
 // その場で Claude（claude-sonnet-5-5）に下書きを作らせる。予算の上限は lib/budget.ts
 export const dynamic = "force-dynamic";
+// 予算の記録（Vercel Blob）と同じ東京で動かす（読み書きの食い違いを避ける）
+export const preferredRegion = "hnd1";
 export const maxDuration = 120;
 
 export async function POST(req: Request) {
