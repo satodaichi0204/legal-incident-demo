@@ -1,10 +1,8 @@
-import { FIRMS, SLUG, firmBySlug } from "@/lib/data";
+import { SLUG, firmBySlug } from "@/lib/data";
 import { initialState, draftsOf } from "@/lib/state";
 
 // 事務所ごとのサイトマップ。デモでは初期の状態で公開中のページを出す（本番はデータベースの公開中のページから作る）
-export function generateStaticParams() {
-  return FIRMS.map((f) => ({ firm: f.slug }));
-}
+export const dynamic = "force-dynamic";
 
 export async function GET(_req: Request, { params }: { params: Promise<{ firm: string }> }) {
   const firm = firmBySlug((await params).firm);
