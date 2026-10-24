@@ -1,0 +1,8 @@
+node_modules
+.next
+.env*
+DEMO_SPEC.md
+入札書の材料.md
+output
+test-results
+playwright-report

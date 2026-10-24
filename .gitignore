@@ -1,0 +1,16 @@
+# 依頼者の情報を含むため、GitHubに上げない
+DEMO_SPEC.md
+入札書の材料.md
+node_modules/
+.next/
+.env*.local
+# ぱくたその写真（再配布禁止）
+public/photos/
+out/
+next-env.d.ts
+*.tsbuildinfo
+.env*
+.vercel
+test-results/
+playwright-report/
+output/
