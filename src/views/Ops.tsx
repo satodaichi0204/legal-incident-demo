@@ -4,6 +4,7 @@ import { Bell, Clock, Copy, Cpu, DatabaseBackup, FastForward, Save, Send } from 
 import { useState } from "react";
 import { PageHeader, RoleBox, Stat } from "@/components/ui";
 import { checkText } from "@/lib/check";
+import { GENERATED, genAnnounce } from "@/lib/generated";
 import { PHOTOS } from "@/lib/photos";
 import { advanceDays, currentUser, draftsOf, firmView, incidentById, nowOf, PRICING, settingsOf, usageYen, YEN, type FirmSettings } from "@/lib/state";
 import { useAppState } from "@/lib/store";
@@ -19,13 +20,21 @@ export function Announce() {
   return (
     <>
       <PageHeader no="運営" title="告知文の案" lead="公開したページを知らせる文の案です（X用、LINE用、ホームページ用、更新の告知）。告知文も、表現と個人の情報のチェックを通します。送信はしません。" photo={PHOTOS.phone} />
-      <RoleBox ai={["公開した事件ページから、媒体ごとの文の案を作る（見本モード：ひな形から作成）", "表現のチェックをかける"]} human={["文を確かめて、事務所の人が自分で投稿する（自動では投稿しない）"]} />
+      <RoleBox ai={["公開した事件ページから、媒体ごとの文の案を作る（Claude で事前に生成。題名を直したページは、ひな形から作成）", "表現のチェックをかける"]} human={["文を確かめて、事務所の人が自分で投稿する（自動では投稿しない）"]} />
       {pub.length === 0 && <p className="card text-sm text-sub">公開中のページがありません。</p>}
       <div className="space-y-5">
         {pub.map((d) => {
           const inc = incidentById(state, d.incidentId)!;
           const url = `https://${settingsOf(state, d.firmId).domain}/${inc.slug}`;
-          const texts = [
+          const ai = genAnnounce(inc.company, d.published!.body.title, firm.name, url);
+          const texts = ai
+            ? [
+                { k: "X（旧Twitter）", v: ai.x },
+                { k: "LINE", v: ai.line },
+                { k: "ホームページ", v: ai.hp },
+                ...(d.corrections.length ? [{ k: "更新の告知", v: `【更新】${d.published!.body.title}のページを更新しました（${d.corrections[d.corrections.length - 1].note}）。${url}` }] : []),
+              ]
+            : [
             { k: "X（旧Twitter）", v: `【事件情報】${d.published!.body.title}。公表の内容と時系列を、出典つきで整理しました。${url}` },
             { k: "LINE", v: `${firm.name}です。${d.published!.body.title}について、公表されている情報をまとめました。ご不安な方はご覧ください。\n${url}` },
             { k: "ホームページ", v: `${d.published!.body.title}について、企業の公式の発表と報道をもとに、事件の概要と時系列をまとめたページを公開しました。` },
@@ -33,7 +42,10 @@ export function Announce() {
           ];
           return (
             <section key={d.id} className="card">
-              <h3 className="mb-3 font-bold">{d.published!.body.title}</h3>
+              <h3 className="mb-3 flex flex-wrap items-center gap-2 font-bold">
+                {d.published!.body.title}
+                <span className={`chip ${ai ? "bg-ai-soft text-ai" : "bg-paper text-sub"}`} data-testid="announce-mode">{ai ? `Claude（${GENERATED.models.draft}）で生成` : "ひな形から作成"}</span>
+              </h3>
               <div className="grid gap-3 md:grid-cols-2">
                 {texts.map((x) => {
                   const issues = checkText(x.v);
@@ -161,8 +173,9 @@ export function OpsPage() {
   const st = settingsOf(state, me.firmId);
   const yen = usageYen(state, me.firmId);
   const allYen = usageYen(state, null);
-  const draftsUsage = state.usage.filter((u) => u.task.startsWith("事件ページ"));
-  const perDraft = draftsUsage.length ? (draftsUsage.reduce((a, u) => a + u.usd, 0) / draftsUsage.length) * YEN : 0;
+  // 下書き1件あたりの費用は、Claude API を実際に呼んだ事前生成の実測から（作り直しの分も含む）
+  const genDrafts = GENERATED.items.flatMap((i) => (i.draft ? [i.draft] : []));
+  const perDraft = genDrafts.length ? (genDrafts.reduce((a, d) => a + d.usd, 0) / genDrafts.length) * YEN : 0;
   return (
     <>
       <PageHeader no="運営" title="運営（通知・契約・AIの利用量）" lead="運営を半自動にする仕組みです。異常と重要な変更だけを通知し、契約の期限が来たら自動で公開を停止します。AI の利用量には上限を付けます。" photo={PHOTOS.laptop}>
@@ -176,7 +189,7 @@ export function OpsPage() {
         <Stat label="デモの今日" value={<span className="text-xl">{now.toLocaleDateString("ja-JP")}</span>} note={state.offsetDays ? `${state.offsetDays}日進めています` : "実際の今日"} icon={<Clock size={16} />} />
         <Stat label="契約の終わり" value={<span className="text-xl">{st.contractEnd}</span>} note={st.active ? "契約中" : "契約終了・公開停止"} />
         <Stat label="この事務所のAIの利用量" value={`${yen.toFixed(2)}円`} note={`上限 ${st.aiCapYen}円/月（見積もり）`} icon={<Cpu size={16} />} />
-        <Stat label="下書き1件あたり（見積もり）" value={`${perDraft.toFixed(1)}円`} note="claude-sonnet-5-5 の料金で計算" />
+        <Stat label="下書き1件あたり（実測）" value={`${perDraft.toFixed(1)}円`} note={`${GENERATED.models.draft} を実際に呼んだ平均`} />
       </div>
       <div className="grid gap-5 lg:grid-cols-2">
         <section className="card">
@@ -199,7 +212,7 @@ export function OpsPage() {
         <section className="card">
           <h2 className="h2 text-base">
             <Cpu size={18} className="text-ai" />
-            AI の利用量（見本モードのため実際の費用は0円。本番の見積もり）
+            AI の利用量（実測＝Claude API を実際に呼んだ量、見積もり＝料金からの計算）
           </h2>
           <div className="mb-3 h-3 overflow-hidden rounded-full bg-paper">
             <div className="h-3 rounded-full bg-ai" style={{ width: `${Math.min(100, (yen / st.aiCapYen) * 100)}%` }} />
@@ -209,6 +222,7 @@ export function OpsPage() {
               <tr>
                 <th>処理</th>
                 <th>モデル</th>
+                <th>量</th>
                 <th className="text-right">トークン（入力/出力）</th>
                 <th className="text-right">円</th>
               </tr>
@@ -222,6 +236,7 @@ export function OpsPage() {
                   <tr key={k}>
                     <td>{u.task}</td>
                     <td>{u.model}</td>
+                    <td>{u.measured ? <span className="chip bg-ai-soft text-ai">実測</span> : <span className="chip bg-paper text-sub">見積もり</span>}</td>
                     <td className="text-right tabular-nums">
                       {u.inTok.toLocaleString()} / {u.outTok.toLocaleString()}
                     </td>
@@ -261,6 +276,71 @@ export function OpsPage() {
           </ul>
         </section>
       </div>
+      <GenerationLog />
     </>
+  );
+}
+
+/** Claude API の事前生成の記録（出典の照合と公開前のチェックの結果、使った量と費用の実測） */
+function GenerationLog() {
+  const g = GENERATED;
+  const ok = g.items.filter((i) => i.draft).length;
+  return (
+    <section className="card mt-5" data-testid="generation-log">
+      <h2 className="h2 text-base">
+        <Cpu size={18} className="text-ai" />
+        AI の事前生成の記録（Claude API を実際に呼んだ結果）
+      </h2>
+      <p className="mb-3 text-sm leading-relaxed text-sub">
+        手元のスクリプトから、架空の記事{g.inputArticles}本だけを渡して生成しました（{new Date(g.generatedAt).toLocaleString("ja-JP")}）。要約・分類は {g.models.summary}、下書きと告知文は {g.models.draft}
+        。受け取った下書きは必ず出典の照合と公開前のチェックを通し、止まったら1回だけ理由を伝えて作り直させ、それでも止まれば見本に戻します。合計{" "}
+        <b className="text-ink">{(g.totalUsd * g.yenPerUsd).toFixed(1)}円</b>（{g.totalUsd.toFixed(4)}ドル）。下書きは {ok}/{g.items.length}件が合格。
+      </p>
+      <div className="overflow-x-auto">
+        <table className="tbl text-xs">
+          <thead>
+            <tr>
+              <th>事件（出典）</th>
+              <th>下書きの結果</th>
+              <th className="text-right">トークン（入力/出力）</th>
+              <th className="text-right">円</th>
+            </tr>
+          </thead>
+          <tbody>
+            {g.items.map((i) => {
+              const tokIn = (i.summary?.inTok ?? 0) + (i.draft?.inTok ?? 0);
+              const tokOut = (i.summary?.outTok ?? 0) + (i.draft?.outTok ?? 0);
+              const usd = (i.summary?.usd ?? 0) + (i.draft?.usd ?? 0);
+              return (
+                <tr key={i.key} data-gen={i.key}>
+                  <td>
+                    {i.company}（架空）<span className="text-mute">　{i.articleIds.join("・")}</span>
+                  </td>
+                  <td>
+                    {i.draft && i.draft.attempts === 1 && <span className="chip bg-ok-soft text-ok">合格</span>}
+                    {i.draft && i.draft.attempts > 1 && (
+                      <>
+                        <span className="chip bg-warn-soft text-warn">作り直して合格</span>
+                        <div className="mt-1 text-mute">1回目：{i.draft.retryReason?.join(" / ")}</div>
+                      </>
+                    )}
+                    {i.failed && (
+                      <>
+                        <span className="chip bg-human-soft text-human">不合格 → 見本に戻す</span>
+                        <div className="mt-1 text-mute">{i.failed.join(" / ")}</div>
+                      </>
+                    )}
+                  </td>
+                  <td className="text-right tabular-nums">
+                    {tokIn.toLocaleString()} / {tokOut.toLocaleString()}
+                  </td>
+                  <td className="text-right tabular-nums">{(usd * g.yenPerUsd).toFixed(2)}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </section>
   );
 }

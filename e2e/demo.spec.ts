@@ -138,3 +138,18 @@ test("すべての管理画面に「AIがすること」と「弁護士・事務
     await expect(page.getByTestId("rolebox"), path).toContainText("弁護士・事務所が確認すること");
   }
 });
+
+test("Claude で事前に生成した下書き・概要・告知文と、その記録（量と費用の実測）が見える", async ({ page }) => {
+  await page.goto("/admin/drafts");
+  await page.locator('tr[data-draft="東和精工"] a').click();
+  await expect(page.getByTestId("draft-mode")).toContainText("Claude（claude-sonnet-5-5）で実際に生成した下書き");
+  await page.goto("/admin/incidents?id=" + encodeURIComponent("東和精工"));
+  await expect(page.getByTestId("incident-detail")).toContainText("claude-haiku-5-5 で実際に生成");
+  await page.goto("/admin/announce");
+  await expect(page.getByTestId("announce-mode").first()).toContainText("Claude");
+  await page.goto("/admin/ops");
+  const log = page.getByTestId("generation-log");
+  await expect(log).toContainText("不合格 → 見本に戻す");
+  await expect(log).toContainText("作り直して合格");
+  await expect(page.getByTestId("mode")).toContainText("AI事前生成モード");
+});

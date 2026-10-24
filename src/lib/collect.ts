@@ -1,4 +1,5 @@
 // 収集と整理：情報源から記事を取り、同じ事件の記事を1つにまとめ（重複の排除）、続報を見つける
+import { genFor } from "./generated";
 import { ARTICLES, SLUG, SOURCES, articleById, type Article, type Category } from "./data";
 
 export type RunResult = { run: number; fetched: string[]; failed: string[] };
@@ -72,8 +73,10 @@ export function cluster(arrived: Record<string, number>): Incident[] {
     .sort((x, y) => y.lastDate.localeCompare(x.lastDate));
 }
 
-/** AI の概要（見本モード：最初の記事の1文目を短く。本番は AI で要約） */
+/** AI の概要。Claude で事前に生成した要約があればそれを、なければ最新の記事の1文目（見本モード） */
 export function summaryOf(inc: Incident): string {
+  const g = genFor(inc.articleIds)?.summary;
+  if (g) return g.text;
   const latest = articleById(inc.articleIds[inc.articleIds.length - 1]);
   return latest.text.split("。")[0] + "。";
 }

@@ -2,6 +2,7 @@
 // 本番では Supabase（認証と、行の単位の権限で事務所ごとに分離）に置き換える想定。
 import { checkDraft } from "./check";
 import { cluster, fetchRun, type Incident } from "./collect";
+import { genDraft, genFor } from "./generated";
 import { ARTICLES, FIRMS, SAMPLE_DRAFTS, articleById, firmById, userById, type DraftBody, type Firm } from "./data";
 
 export type DraftStatus = "draft" | "pending" | "rejected" | "published" | "needs_reapproval" | "stopped";
@@ -19,7 +20,8 @@ export type Draft = {
   id: string;
   firmId: string;
   incidentId: string;
-  mode: "sample" | "auto";
+  /** ai＝Claude で事前に生成、sample＝見本（完成形）、auto＝簡易作成 */
+  mode: "ai" | "sample" | "auto";
   status: DraftStatus;
   body: DraftBody;
   versions: Version[];
@@ -31,7 +33,8 @@ export type Draft = {
   corrections: { at: string; note: string }[];
 };
 export type Notice = { id: string; at: string; firmId: string | null; level: "error" | "warn" | "info"; title: string; body: string };
-export type Usage = { at: string; firmId: string | null; task: string; model: string; inTok: number; outTok: number; usd: number };
+/** measured＝Claude API を実際に呼んだときの量（事前生成の実測）。ないものは見積もり */
+export type Usage = { at: string; firmId: string | null; task: string; model: string; inTok: number; outTok: number; usd: number; measured?: boolean };
 export type FirmSettings = Pick<Firm, "name" | "address" | "fee" | "formUrl" | "domain" | "domainType" | "pageQuota" | "aiCapYen" | "lawyers"> & { contractEnd: string; active: boolean };
 
 export type State = {
@@ -50,7 +53,7 @@ export type State = {
   backups: { at: string; note: string }[];
 };
 
-/** 料金（Claude API の公式の料金。1ドル150円で換算）。見本モードでは実際には呼ばず、本番の見積もりとして記録する */
+/** 料金（Claude API の公式の料金。1ドル150円で換算）。事前生成の実測がないものは、この料金で見積もって記録する */
 export const PRICING = {
   "claude-haiku-5-5": { in: 0.1, out: 0.5 },
   "claude-sonnet-5-5": { in: 2, out: 10 },
@@ -78,8 +81,10 @@ export const firmView = (s: State, firmId: string): Firm & { active: boolean; co
 export const draftsOf = (s: State, firmId: string) => s.drafts.filter((d) => d.firmId === firmId);
 export const currentUser = (s: State) => userById(s.userId);
 
-/** 下書きを作る（見本の4件は完成形、それ以外は記事の文から組み立てる「簡易作成」） */
-export function buildBody(inc: Incident): { body: DraftBody; mode: "sample" | "auto" } {
+/** 下書きを作る。Claude で事前に生成し、出典の照合と公開前のチェックに合格したものを使う。ないとき（不合格を含む）は見本の完成形、それもなければ記事の文から組み立てる「簡易作成」 */
+export function buildBody(inc: Incident): { body: DraftBody; mode: Draft["mode"]; usage?: Pick<Usage, "model" | "inTok" | "outTok" | "usd"> } {
+  const ai = genDraft(inc.articleIds);
+  if (ai) return { body: ai.body, mode: "ai", usage: ai.usage };
   const sample = SAMPLE_DRAFTS[inc.company];
   if (sample && !inc.updated) return { body: structuredClone(sample), mode: "sample" };
   const arts = inc.articleIds.map(articleById);
@@ -145,8 +150,17 @@ export function collect(s: State, now: Date): State {
   const arrived = { ...s.arrived };
   for (const id of r.fetched) arrived[id] = run;
   let next: State = { ...s, arrived, runs: [...s.runs, { no: run, at: iso(now), fetched: r.fetched.length, failed: r.failed }] };
-  for (const id of r.fetched) {
-    next.usage = [...next.usage, usage(iso(now), null, `記事の要約・分類（${articleById(id).company}）`, "claude-haiku-5-5", 3000, 1000)];
+  // 記事が増えた事件ごとに、要約・分類の利用量を記録する（事前生成の実測があれば、その量）
+  for (const inc of incidentsOf(next)) {
+    const added = inc.articleIds.filter((id) => r.fetched.includes(id));
+    if (added.length === 0) continue;
+    const g = genFor(inc.articleIds)?.summary;
+    next.usage = [
+      ...next.usage,
+      g
+        ? { at: iso(now), firmId: null, task: `事件の要約・分類（${inc.company}）`, model: g.model, inTok: g.inTok, outTok: g.outTok, usd: g.usd, measured: true }
+        : usage(iso(now), null, `事件の要約・分類（${inc.company}）`, "claude-haiku-5-5", 3000 * added.length, 1000),
+    ];
   }
   for (const src of r.failed) {
     next = notice(next, { at: iso(now), firmId: null, level: "error", title: "情報源の取得に失敗しました", body: `${src}：応答がありません（次の回で自動で再試行します）` });
@@ -165,10 +179,10 @@ export function collect(s: State, now: Date): State {
 export function createDraft(s: State, firmId: string, incidentId: string, userId: string, now: Date): State {
   const inc = incidentById(s, incidentId);
   if (!inc) return s;
-  const { body, mode } = buildBody(inc);
+  const { body, mode, usage: u } = buildBody(inc);
   const id = `d${s.seq + 1}`;
-  const d: Draft = { id, firmId, incidentId, mode, status: "draft", body, versions: [{ no: 1, at: iso(now), by: userId, note: mode === "sample" ? "下書きを作成（見本）" : "下書きを作成（簡易作成）", body: structuredClone(body) }], published: null, approvals: [], corrections: [] };
-  return { ...s, seq: s.seq + 1, drafts: [...s.drafts, d], usage: [...s.usage, usage(iso(now), firmId, `事件ページの下書き（${inc.company}）`, "claude-sonnet-5-5", 4000, 2000)] };
+  const d: Draft = { id, firmId, incidentId, mode, status: "draft", body, versions: [{ no: 1, at: iso(now), by: userId, note: mode === "ai" ? "下書きを作成（Claude で生成）" : mode === "sample" ? "下書きを作成（見本）" : "下書きを作成（簡易作成）", body: structuredClone(body) }], published: null, approvals: [], corrections: [] };
+  return { ...s, seq: s.seq + 1, drafts: [...s.drafts, d], usage: [...s.usage, u ? { at: iso(now), firmId, task: `事件ページの下書き（${inc.company}）`, ...u, measured: true } : usage(iso(now), firmId, `事件ページの下書き（${inc.company}）`, "claude-sonnet-5-5", 4000, 2000)] };
 }
 
 const update = (s: State, id: string, fn: (d: Draft) => Draft): State => ({ ...s, drafts: s.drafts.map((d) => (d.id === id ? fn(d) : d)) });

@@ -10,6 +10,7 @@ import { checkDraft } from "@/lib/check";
 import { articleById, sourceById, userById, type DraftBody } from "@/lib/data";
 import { incidentPhoto } from "@/lib/photos";
 import { approve, changeKind, currentUser, firmView, incidentById, nowOf, reject, requestApproval, saveDraft, settingsOf, stop, STATUS_LABEL, type Result, type State } from "@/lib/state";
+import { GENERATED } from "@/lib/generated";
 import { useAppState } from "@/lib/store";
 
 const STATUS_CLS: Record<string, string> = {
@@ -87,7 +88,7 @@ function Editor({ msg, setMsg }: { msg: Msg; setMsg: (m: Msg) => void }) {
         </span>
       </PageHeader>
       <RoleBox
-        ai={["出典の文から、事実の文と時系列の下書きを作る（見本モード：主要な4件は完成形）", "書き直すたびに、広告の確認（8項目）をやり直す", "公開後の変更が重要か軽いかを見分ける"]}
+        ai={["出典の文から、事実の文と時系列の下書きを作る（Claude で事前に生成。出典の照合とチェックに合格したものだけを使い、不合格なら見本に戻す）", "書き直すたびに、広告の確認（8項目）をやり直す", "公開後の変更が重要か軽いかを見分ける"]}
         human={["事実の文と出典が合っているかを確かめ、言い回しを直す（事務員・弁護士）", "承認と公開停止は、弁護士だけが行う"]}
       />
       {msg && (
@@ -116,7 +117,9 @@ function Editor({ msg, setMsg }: { msg: Msg; setMsg: (m: Msg) => void }) {
             <div>
               <div className="mb-2 flex items-center justify-between">
                 <span className="text-xs font-bold text-sub">事件の概要（事実の文。1文ごとに出典を付ける）</span>
-                <span className={`chip ${d.mode === "sample" ? "bg-ok-soft text-ok" : "bg-warn-soft text-warn"}`}>{d.mode === "sample" ? "見本（完成形）" : "簡易作成（本番は AI で作成）"}</span>
+                <span className={`chip ${d.mode === "ai" ? "bg-ai-soft text-ai" : d.mode === "sample" ? "bg-ok-soft text-ok" : "bg-warn-soft text-warn"}`} data-testid="draft-mode">
+                  {d.mode === "ai" ? `Claude（${GENERATED.models.draft}）で実際に生成した下書き` : d.mode === "sample" ? "見本（完成形）" : "簡易作成（記事の文から組み立て）"}
+                </span>
               </div>
               <ol className="space-y-3" data-testid="facts">
                 {body.facts.map((f, i) => {

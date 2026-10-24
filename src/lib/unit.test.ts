@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { checkDraft, checkText, groundFact } from "./check";
 import { cluster, extractCount, fetchRun } from "./collect";
 import { ARTICLES, FIRMS, PROBLEM_DRAFTS, SAMPLE_DRAFTS, firmById } from "./data";
+import { GENERATED, genDraft } from "./generated";
 import { INDUSTRIES } from "./industry";
 import { advanceDays, approve, changeKind, collect, createDraft, draftsOf, firmView, incidentsOf, initialState, parseState, reject, requestApproval, saveDraft, settingsOf, stop, type State } from "./state";
 
@@ -144,7 +145,7 @@ describe("承認と公開", () => {
   it("お知らせの文の誤字の修正は、再承認なしで訂正として反映する", () => {
     const s = fresh();
     const d = draftOf(s, "firm-a", "ミドリ通販");
-    const r = saveDraft(s, d.id, { ...d.body, guidance: d.body.guidance.replace("ご注意ください", "ご注意下さい") }, "u-a2", "", NOW);
+    const r = saveDraft(s, d.id, { ...d.body, guidance: d.body.guidance.replace("ください", "下さい") }, "u-a2", "", NOW);
     expect(r.kind).toBe("minor");
     const after = draftOf(r.state, "firm-a", "ミドリ通販");
     expect(after.status).toBe("published");
@@ -225,5 +226,39 @@ describe("出典の照合（複数の出典）", () => {
     const text = "株式会社ミドリ通販（架空）は2026年9月28日、通販サイトが不正アクセスを受け、会員の情報約18万件が流出した可能性があると発表しました。";
     expect(groundFact(text, ["a1", "a3"])).not.toBeNull();
     expect(groundFact(text, ["a1"])).toBeNull();
+  });
+});
+
+describe("Claude の事前生成（data/generated.json）", () => {
+  it("合格した下書きは、すべての事務所で公開前のチェックを通り、事実の文の出典はその事件の記事だけ", () => {
+    for (const i of GENERATED.items.filter((x) => x.draft)) {
+      const body = genDraft(i.articleIds)!.body;
+      for (const f of FIRMS) expect(checkDraft(body, f).pass, `${i.key} ${f.id}`).toBe(true);
+      for (const fact of body.facts) for (const src of fact.sources) expect(i.articleIds).toContain(src);
+    }
+  });
+  it("生成した下書きを使い（mode＝ai）、使った量は実測として記録する", () => {
+    const s = fresh();
+    const d = draftOf(s, "firm-a", "ミドリ通販");
+    expect(d.mode).toBe("ai");
+    const u = s.usage.find((x) => x.task === "事件ページの下書き（ミドリ通販）")!;
+    expect(u.measured).toBe(true);
+    expect(u.model).toBe(GENERATED.models.draft);
+  });
+  it("不合格だった事件は見本に戻し、生成した文は使わない", () => {
+    const failed = GENERATED.items.find((i) => i.failed)!;
+    expect(genDraft(failed.articleIds)).toBeNull();
+    let s = collect(fresh(), NOW);
+    s = createDraft(s, "firm-a", failed.company, "u-a2", NOW);
+    expect(s.drafts[s.drafts.length - 1].mode).not.toBe("ai");
+  });
+  it("続報が届いた後の事件（ミドリ通販の第2報）は、新しい件数と第2報の出典で生成されている", () => {
+    const d = genDraft(["a1", "a2", "a3"])!.body;
+    const f = d.facts.find((x) => x.text.includes("約18万件"))!;
+    expect(f.sources).toContain("a3");
+    expect(d.facts.some((x) => x.text.includes("約12万件") && !x.sources.includes("a3"))).toBe(false);
+  });
+  it("費用は上限（5ドル）を大きく下回る", () => {
+    expect(GENERATED.totalUsd).toBeLessThan(1);
   });
 });

@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { PageHeader, RoleBox } from "@/components/ui";
 import { summaryOf } from "@/lib/collect";
+import { genFor } from "@/lib/generated";
 import { CATEGORY_LABEL, articleById, sourceById } from "@/lib/data";
 import { PHOTOS, incidentPhoto } from "@/lib/photos";
 import { createDraft, currentUser, draftsOf, incidentsOf, nowOf, STATUS_LABEL } from "@/lib/state";
@@ -81,7 +82,7 @@ export default function Incidents() {
             <div className="rounded-xl bg-ai-soft p-3 text-sm">
               <div className="mb-1 flex items-center gap-1 text-xs font-bold text-ai">
                 <Sparkles size={13} />
-                AI の概要（見本モード：本番は AI で要約）
+                {genFor(sel.articleIds)?.summary ? `AI の概要（Claude ${genFor(sel.articleIds)!.summary!.model} で実際に生成）` : "AI の概要（見本モード：最新の記事の1文目）"}
               </div>
               {summaryOf(sel)}
             </div>

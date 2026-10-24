@@ -3,7 +3,7 @@
 import { useCallback, useSyncExternalStore } from "react";
 import { initialState, parseState, type State } from "./state";
 
-const KEY = "legal_incident_demo_v1";
+const KEY = "legal_incident_demo_v2";
 const SERVER = initialState(new Date());
 let cache: State | null = null;
 const listeners = new Set<() => void>();

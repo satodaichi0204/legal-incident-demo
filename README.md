@@ -4,7 +4,8 @@ AI が公開情報（個人情報の漏えい、サイバー攻撃、消費者�
 
 - 企業、事件、法律事務所、弁護士、ニュースサイトは**すべて架空**です。実在のサイトにはアクセスしません。
 - 被害者の情報は扱いません（受付は事務所の外部のフォームへのリンクだけ）。法律事務所の比較・紹介、AI による法的な評価は作りません。
-- 見本モード（APIキー不要）。AI の利用量は、Claude API の料金で見積もって記録します（実際には呼びません）。
+- **AI は事前生成**：事件の概要・分類（claude-haiku-5-5）と、下書き・告知文の案（claude-sonnet-5-5）は、手元のスクリプトから Claude API を実際に呼んで作り、`data/generated.json` に保存しています。公開したデモは API を呼ばず、この JSON を表示するだけです（APIキーは公開側に置きません）。
+- 生成した下書きは、必ず出典の照合と公開前のチェックを通します。止まったら1回だけ理由を伝えて作り直させ、それでも止まれば見本（完成形）に戻します。
 
 ## 流れ
 
@@ -21,6 +22,13 @@ npm run build && npm run test:e2e   # 通しのテスト（Playwright。パソ�
 
 右上で利用者を切り替えると、事務所（さくら／みなと）と役割（弁護士＝承認者、事務員＝編集者）が変わります。
 
+## AI の事前生成をやり直す
+
+```bash
+# .env.local に ANTHROPIC_API_KEY を置く（GitHub には入れない。.gitignore 済み）
+npx tsx --env-file=.env.local scripts/pregenerate.ts   # 1回で約16円（上限 1ドルで自動で止まる）
+```
+
 ## 構成
 
 | 場所 | 役割 |
@@ -30,6 +38,7 @@ npm run build && npm run test:e2e   # 通しのテスト（Playwright。パソ�
 | `src/lib/state.ts` | 承認の流れ、版、再承認、公開停止、契約の期限、通知、AI の利用量 |
 | `src/lib/industry.ts` | 業種の設定（他業種への転用：リフォーム業、退職代行の例） |
 | `src/lib/data.ts` | 架空のデータ |
+| `scripts/pregenerate.ts`、`src/lib/generated.ts` | Claude API での事前生成と、その結果の読み込み |
 | `src/views/`、`src/app/` | 画面。公開ページは `src/app/s/[firm]/` |
 
 本番では、データベースと認証に Supabase（行の単位の権限で事務所ごとに分離）を使う想定です。
