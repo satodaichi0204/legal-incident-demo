@@ -151,5 +151,23 @@ test("Claude で事前に生成した下書き・概要・告知文と、その�
   const log = page.getByTestId("generation-log");
   await expect(log).toContainText("不合格 → 見本に戻す");
   await expect(log).toContainText("作り直して合格");
-  await expect(page.getByTestId("mode")).toContainText("AI事前生成モード");
+  await expect(page.getByTestId("mode")).toContainText("AIモード");
+});
+
+// Claude API を実際に呼ぶ（費用がかかるので、LIVE_AI=1 のときだけ、パソコンの1回だけ）
+test("その場の生成：Claude で下書きを作り直し、チェックを通ったものが編集の欄に入り、予算が減る", async ({ page }, info) => {
+  test.skip(!process.env.LIVE_AI || info.project.name !== "パソコン", "LIVE_AI=1 のときだけ");
+  test.setTimeout(180_000);
+  await page.goto("/admin/drafts");
+  await page.locator('tr[data-draft="東和精工"] a').click();
+  const before = Number(await page.getByTestId("budget-remaining").first().textContent());
+  await page.getByTestId("live-draft-run").click();
+  const result = page.getByTestId("live-draft-result");
+  await expect(result).toBeVisible({ timeout: 150_000 });
+  await expect(result).toContainText("claude-sonnet-5-5");
+  if ((await result.textContent())!.includes("合格")) {
+    await expect(page.getByLabel("変更のメモ")).toHaveValue(/Claude（claude-sonnet-5-5）でその場で作り直し/);
+    await expect(page.getByTestId("check-verdict")).toHaveText("承認の依頼に進めます");
+  }
+  await expect.poll(async () => Number(await page.getByTestId("budget-remaining").first().textContent())).toBeLessThan(before);
 });

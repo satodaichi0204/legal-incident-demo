@@ -185,6 +185,11 @@ export function createDraft(s: State, firmId: string, incidentId: string, userId
   return { ...s, seq: s.seq + 1, drafts: [...s.drafts, d], usage: [...s.usage, u ? { at: iso(now), firmId, task: `事件ページの下書き（${inc.company}）`, ...u, measured: true } : usage(iso(now), firmId, `事件ページの下書き（${inc.company}）`, "claude-sonnet-5-5", 4000, 2000)] };
 }
 
+/** 公開デモで Claude API をその場で呼んだときの量を記録する（実測） */
+export function recordUsage(s: State, firmId: string | null, task: string, u: Pick<Usage, "model" | "inTok" | "outTok" | "usd">, now: Date): State {
+  return { ...s, usage: [...s.usage, { at: iso(now), firmId, task, ...u, measured: true }] };
+}
+
 const update = (s: State, id: string, fn: (d: Draft) => Draft): State => ({ ...s, drafts: s.drafts.map((d) => (d.id === id ? fn(d) : d)) });
 const lastVersion = (d: Draft) => d.versions[d.versions.length - 1].no;
 

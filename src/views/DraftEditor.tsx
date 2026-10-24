@@ -5,11 +5,12 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useState } from "react";
 import CheckPanel from "@/components/CheckPanel";
+import { LiveDraftPanel } from "@/components/LiveAI";
 import { Empty, PageHeader, RoleBox } from "@/components/ui";
 import { checkDraft } from "@/lib/check";
 import { articleById, sourceById, userById, type DraftBody } from "@/lib/data";
 import { incidentPhoto } from "@/lib/photos";
-import { approve, changeKind, currentUser, firmView, incidentById, nowOf, reject, requestApproval, saveDraft, settingsOf, stop, STATUS_LABEL, type Result, type State } from "@/lib/state";
+import { approve, recordUsage, changeKind, currentUser, firmView, incidentById, nowOf, reject, requestApproval, saveDraft, settingsOf, stop, STATUS_LABEL, type Result, type State } from "@/lib/state";
 import { GENERATED } from "@/lib/generated";
 import { useAppState } from "@/lib/store";
 
@@ -109,6 +110,17 @@ function Editor({ msg, setMsg }: { msg: Msg; setMsg: (m: Msg) => void }) {
 
       <div className="grid gap-5 xl:grid-cols-[1.15fr_1fr]">
         <div className="space-y-4">
+          {["draft", "rejected", "needs_reapproval", "published", "stopped"].includes(d.status) && (
+            <LiveDraftPanel
+              articleIds={inc.articleIds}
+              onApply={(b, n, u) => {
+                setBody(b);
+                setNote(n);
+                update((s) => recordUsage(s, d.firmId, `事件ページの下書き・その場の生成（${inc.company}）`, u, nowOf(s, new Date())));
+                setMsg({ ok: true, text: "Claude が作った下書きを編集の欄に入れました。確かめて「版を保存」を押してください。" });
+              }}
+            />
+          )}
           <section className="card space-y-4">
             <label className="block">
               <span className="mb-1 block text-xs font-bold text-sub">題名</span>

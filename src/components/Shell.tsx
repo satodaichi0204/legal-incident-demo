@@ -155,7 +155,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
           </div>
           <span className="hidden rounded-full bg-[#fff6dd] px-3 py-1 text-xs font-medium text-[#7a5600] xl:inline-flex">架空のデータ・実際には公開・送信しません</span>
           <span className="rounded-full bg-ai-soft px-3 py-1 text-xs font-bold text-ai" data-testid="mode">
-            AI事前生成モード（公開側は API を呼ばない）
+            AIモード（Claude API・予算の上限1ドル）
           </span>
           <UserSwitch />
         </div>

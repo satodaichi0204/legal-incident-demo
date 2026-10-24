@@ -47,7 +47,9 @@ const numbers = (s: string) => s.normalize("NFKC").replace(/,/g, "").match(/\d+/
 export function groundFact(text: string, sourceIds: string[]): string | null {
   const texts = sourceIds.map((id) => articleById(id)?.text).filter((x): x is string => !!x);
   if (texts.length === 0) return null;
-  const srcNums = new Set(texts.flatMap(numbers));
+  // 記事の日付（報じた日・発表した日）も出典の一部として数える
+  const dates = sourceIds.flatMap((id) => articleById(id)?.date.split("-").map((p) => String(Number(p))) ?? []);
+  const srcNums = new Set([...texts.flatMap(numbers), ...dates]);
   if (!numbers(text).every((n) => srcNums.has(n))) return null;
   return containment(text, texts.join("")) >= 0.5 ? sourceIds[0] : null;
 }

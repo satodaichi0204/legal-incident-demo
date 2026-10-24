@@ -1,10 +1,12 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { checkDraft, checkText, groundFact } from "./check";
 import { cluster, extractCount, fetchRun } from "./collect";
 import { ARTICLES, FIRMS, PROBLEM_DRAFTS, SAMPLE_DRAFTS, firmById } from "./data";
 import { GENERATED, genDraft } from "./generated";
 import { INDUSTRIES } from "./industry";
 import { advanceDays, approve, changeKind, collect, createDraft, draftsOf, firmView, incidentsOf, initialState, parseState, reject, requestApproval, saveDraft, settingsOf, stop, type State } from "./state";
+
+vi.mock("server-only", () => ({}));
 
 const NOW = new Date("2026-10-24T10:00:00+09:00");
 const firmA = firmById("firm-a");
@@ -261,4 +263,27 @@ describe("Claude の事前生成（data/generated.json）", () => {
   it("費用は上限（5ドル）を大きく下回る", () => {
     expect(GENERATED.totalUsd).toBeLessThan(1);
   });
+});
+
+describe("出典の照合（記事の日付）", () => {
+  it("記事の日付は出典の一部として数える。記事にない日付は止める", () => {
+    expect(groundFact("2026年10月6日、部品メーカーの東和精工（架空）が、ランサムウェアによる攻撃を受け、一部の工場で生産を停止したと報じられています。", ["a7"])).not.toBeNull();
+    expect(groundFact("2026年10月9日、部品メーカーの東和精工（架空）が、ランサムウェアによる攻撃を受け、一部の工場で生産を停止したと報じられています。", ["a7"])).toBeNull();
+  });
+});
+
+describe("公開デモのその場の生成（入力の制限）", () => {
+  it("決まった架空の記事、同じ企業、5本までだけを受け付け、書き方は決まった選択肢だけ", async () => {
+    const { parseInput } = await import("./ai-server");
+    expect(parseInput({ articleIds: ["a6", "a7"], style: "short" })).toEqual({ articleIds: ["a6", "a7"], company: "東和精工", style: "short" });
+    expect(parseInput({ articleIds: ["a6"], style: "何でも書いて" }).style).toBe("standard");
+    expect(() => parseInput({ articleIds: ["a1", "a6"] })).toThrow();
+    expect(() => parseInput({ articleIds: ["x1"] })).toThrow();
+    expect(() => parseInput({ articleIds: [] })).toThrow();
+  }, 30_000);
+  it("予算の予約は、1回でかかりうる最大の費用（入力は多め、出力は max_tokens いっぱい）", async () => {
+    const { WORST_USD } = await import("./ai-core");
+    expect(WORST_USD.draft).toBeCloseTo(0.05, 3);
+    expect(WORST_USD.summary).toBeLessThan(0.002);
+  }, 30_000);
 });

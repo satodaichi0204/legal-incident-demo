@@ -7,6 +7,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { PageHeader, RoleBox } from "@/components/ui";
 import { summaryOf } from "@/lib/collect";
 import { genFor } from "@/lib/generated";
+import { LiveSummaryButton } from "@/components/LiveAI";
 import { CATEGORY_LABEL, articleById, sourceById } from "@/lib/data";
 import { PHOTOS, incidentPhoto } from "@/lib/photos";
 import { createDraft, currentUser, draftsOf, incidentsOf, nowOf, STATUS_LABEL } from "@/lib/state";
@@ -85,6 +86,9 @@ export default function Incidents() {
                 {genFor(sel.articleIds)?.summary ? `AI の概要（Claude ${genFor(sel.articleIds)!.summary!.model} で実際に生成）` : "AI の概要（見本モード：最新の記事の1文目）"}
               </div>
               {summaryOf(sel)}
+              <div className="mt-3">
+                <LiveSummaryButton articleIds={sel.articleIds} />
+              </div>
             </div>
             <div>
               <div className="mb-2 text-xs font-bold text-sub">出典（{sel.articleIds.length}本）</div>

@@ -5,6 +5,7 @@ import { useState } from "react";
 import { PageHeader, RoleBox, Stat } from "@/components/ui";
 import { checkText } from "@/lib/check";
 import { GENERATED, genAnnounce } from "@/lib/generated";
+import { LiveCallLog } from "@/components/LiveAI";
 import { PHOTOS } from "@/lib/photos";
 import { advanceDays, currentUser, draftsOf, firmView, incidentById, nowOf, PRICING, settingsOf, usageYen, YEN, type FirmSettings } from "@/lib/state";
 import { useAppState } from "@/lib/store";
@@ -276,6 +277,7 @@ export function OpsPage() {
           </ul>
         </section>
       </div>
+      <LiveCallLog />
       <GenerationLog />
     </>
   );

@@ -26,7 +26,7 @@ export default function Home() {
           <div>
             <span className="inline-flex items-center gap-1.5 rounded-full bg-white/12 px-3 py-1 text-xs font-bold backdrop-blur">
               <Scale size={13} />
-              法律事務所向け・デモ版（Claude で事前に生成）
+              法律事務所向け・デモ版（Claude API で動作）
             </span>
             <h1 className="mt-4 text-[24px] leading-tight font-black tracking-wide sm:text-[32px] md:text-[40px]">
               事件の情報を、AIが集めて整理し、
